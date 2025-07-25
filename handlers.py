@@ -2,12 +2,14 @@ from aiogram import types
 from aiogram import Dispatcher
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Command, Text
-from aiogram.types import Message, MediaGroup
+from aiogram.types import Message, MediaGroup, ContentType
 from aiogram.types import InputMediaDocument
 from aiogram.dispatcher.filters.state import State, StatesGroup
 import re
 from datetime import datetime
 from db import insert_operation
+import csv
+import io
 
 incomes = []
 expenses = []
@@ -27,13 +29,13 @@ class Form(StatesGroup):
 
 async def start_command(message: types.Message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Добавить доход", "Добавить расход", "Получить выписку из банка")
+    kb.add("Добавить доход", "Добавить расход", "Загрузить данные с помощью csv", "Получить выписку из банка")
     await message.answer("Добро пожаловать в Money Keeper Bot!", reply_markup=kb)
 
 
 async def begin_command(message: types.Message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Добавить доход", "Добавить расход", "Получить выписку из банка")
+    kb.add("Добавить доход", "Добавить расход", "Загрузить данные с помощью csv", "Получить выписку из банка")
     await message.answer("Выберите действие", reply_markup=kb)
 
 
@@ -147,6 +149,45 @@ async def save_expense(message: types.Message, state: FSMContext):
             await Form.add_expense_amount.set()
 
 
+async def prompt_csv_upload(message: Message):
+    await message.answer(
+        "Пожалуйста, отправьте CSV-файл с данными. Формат: category,amount,timestamp,is_income (1 — доход, 0 — расход)")
+
+
+async def handle_csv_file(message: Message):
+    if not message.document.file_name.endswith(".csv"):
+        await message.reply("Файл должен иметь расширение .csv")
+        return
+
+    file = await message.document.download(destination=io.BytesIO())
+    file.seek(0)
+
+    try:
+        decoded = io.TextIOWrapper(file, encoding='windows-1251')
+        reader = csv.DictReader(decoded)
+
+        success, failed = 0, 0
+
+        for row in reader:
+            try:
+                category = row["category"]
+                amount = int(float(row["amount"]))
+                is_income = int(row["flag"])
+                insert_operation(
+                    user_id=message.from_user.id,
+                    amount=amount,
+                    category=category,
+                    is_income=is_income
+                )
+                success += 1
+            except Exception:
+                failed += 1
+
+        await message.reply(f"Успешно добавлено: {success} операций\nОшибок: {failed}")
+    except Exception as e:
+        await message.reply("!!!️ Ошибка при обработке CSV. Проверьте формат и кодировку файла.")
+
+
 async def get_statement_start_date(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['start_date'] = message.text
@@ -212,9 +253,11 @@ async def process_bank_choice(callback_query: types.CallbackQuery, state: FSMCon
 def register_handlers(dp: Dispatcher):
     dp.register_message_handler(start_command, Command("start"))
     dp.register_message_handler(add_income, Text(equals="Добавить доход"))
-    dp.register_message_handler(select_income_category, Text(equals=['Зарплата', 'Продажа', 'Другой тип дохода', 'Назад']))
+    dp.register_message_handler(select_income_category,
+                                Text(equals=['Зарплата', 'Продажа', 'Другой тип дохода', 'Назад']))
     dp.register_message_handler(add_expense, Text(equals="Добавить расход"))
-    dp.register_message_handler(select_expense_category, Text(equals=['Продукты', 'Рестораны', 'Другой тип расхода', 'Назад']))
+    dp.register_message_handler(select_expense_category,
+                                Text(equals=['Продукты', 'Рестораны', 'Другой тип расхода', 'Назад']))
     dp.register_message_handler(request_statement, Text(equals="Получить выписку из банка"))
     dp.register_message_handler(custom_income_category, state=Form.add_custom_income_category)
     dp.register_message_handler(save_income, state=Form.add_income_amount)
@@ -223,3 +266,5 @@ def register_handlers(dp: Dispatcher):
     dp.register_message_handler(get_statement_start_date, state=Form.statement_start_date)
     dp.register_message_handler(get_statement_end_date, state=Form.statement_end_date)
     dp.register_callback_query_handler(process_bank_choice, Text(startswith="bank_"))
+    dp.register_message_handler(prompt_csv_upload, Text(equals="Загрузить данные с помощью csv"))
+    dp.register_message_handler(handle_csv_file, content_types=ContentType.DOCUMENT)
