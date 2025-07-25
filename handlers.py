@@ -7,6 +7,7 @@ from aiogram.types import InputMediaDocument
 from aiogram.dispatcher.filters.state import State, StatesGroup
 import re
 from datetime import datetime
+from db import insert_operation
 
 incomes = []
 expenses = []
@@ -44,13 +45,15 @@ async def add_income(message: types.Message):
     await message.answer("Выберите категорию:", reply_markup=kb)
 
 
-async def select_income_category(message: types.Message):
+async def select_income_category(message: types.Message, state: FSMContext):
     if message.text == "Другое":
         await message.answer("Введите название категории:")
         await Form.add_custom_income_category.set()
     elif message.text == "Назад":
         await begin_command(message)
     else:
+        async with state.proxy() as data:
+            data["income_category"] = message.text
         await message.answer("Введите сумму:")
         await Form.add_income_amount.set()
 
@@ -63,13 +66,15 @@ async def add_expense(message: types.Message):
     await message.answer("Выберите категорию:", reply_markup=kb)
 
 
-async def select_expense_category(message: types.Message):
+async def select_expense_category(message: types.Message, state: FSMContext):
     if message.text == "Другое":
         await message.answer("Введите название категории:")
         await Form.add_custom_expense_category.set()
     elif message.text == "Назад":
         await begin_command(message)
     else:
+        async with state.proxy() as data:
+            data["expense_category"] = message.text
         await message.answer("Введите сумму:")
         await Form.add_expense_amount.set()
 
@@ -98,8 +103,8 @@ async def save_income(message: types.Message, state: FSMContext):
         try:
             income_amount = float(message.text)
             async with state.proxy() as data:
-                category = data.get('custom_income_category', message.text)
-                incomes.append({"category": category, "amount": income_amount})
+                category = data.get("custom_income_category") or data.get("income_category")
+            insert_operation(user_id=message.from_user.id, amount=int(income_amount), category=category, is_income=1)
             await message.answer("Отлично! Ваш доход записан.")
             await state.finish()
             await begin_command(message)
@@ -129,8 +134,9 @@ async def save_expense(message: types.Message, state: FSMContext):
         try:
             expense_amount = float(message.text)
             async with state.proxy() as data:
-                category = data.get('custom_expense_category', message.text)
-                expenses.append({"category": category, "amount": expense_amount})
+                category = data.get("custom_expense_category") or data.get("expense_category")
+            insert_operation(user_id=message.from_user.id, amount=int(expense_amount), category=category,
+                             is_income=0)
             await message.answer("Отлично! Ваш расход записан.")
             await state.finish()
             await begin_command(message)

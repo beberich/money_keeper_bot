@@ -4,6 +4,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils import executor
 from handlers import register_handlers
 from secret_info import TOKEN
+from db import init_db
 
 API_TOKEN = TOKEN
 
@@ -21,4 +22,5 @@ async def on_startup(dp):
 
 
 if __name__ == '__main__':
+    init_db()
     executor.start_polling(dp, on_startup=on_startup)
