@@ -11,8 +11,8 @@ from db import insert_operation
 
 incomes = []
 expenses = []
-income_categories = ['Зарплата', 'Продажа', 'Другое']
-expense_categories = ['Продукты', 'Рестораны', 'Другое']
+income_categories = ['Зарплата', 'Продажа', 'Другой тип дохода']
+expense_categories = ['Продукты', 'Рестораны', 'Другой тип расхода']
 
 
 class Form(StatesGroup):
@@ -46,7 +46,7 @@ async def add_income(message: types.Message):
 
 
 async def select_income_category(message: types.Message, state: FSMContext):
-    if message.text == "Другое":
+    if message.text == "Другой тип дохода":
         await message.answer("Введите название категории:")
         await Form.add_custom_income_category.set()
     elif message.text == "Назад":
@@ -67,7 +67,7 @@ async def add_expense(message: types.Message):
 
 
 async def select_expense_category(message: types.Message, state: FSMContext):
-    if message.text == "Другое":
+    if message.text == "Другой тип расхода":
         await message.answer("Введите название категории:")
         await Form.add_custom_expense_category.set()
     elif message.text == "Назад":
@@ -112,7 +112,7 @@ async def save_income(message: types.Message, state: FSMContext):
             kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
             kb.add("Назад")
             await message.answer("Введите корректную сумму:", reply_markup=kb)
-            await Form.add_expense_amount.set()
+            await Form.add_income_amount.set()
 
 
 async def custom_expense_category(message: types.Message, state: FSMContext):
@@ -212,9 +212,9 @@ async def process_bank_choice(callback_query: types.CallbackQuery, state: FSMCon
 def register_handlers(dp: Dispatcher):
     dp.register_message_handler(start_command, Command("start"))
     dp.register_message_handler(add_income, Text(equals="Добавить доход"))
-    dp.register_message_handler(select_income_category, Text(equals=['Зарплата', 'Продажа', 'Другое', 'Назад']))
+    dp.register_message_handler(select_income_category, Text(equals=['Зарплата', 'Продажа', 'Другой тип дохода', 'Назад']))
     dp.register_message_handler(add_expense, Text(equals="Добавить расход"))
-    dp.register_message_handler(select_expense_category, Text(equals=['Продукты', 'Рестораны', 'Другое', 'Назад']))
+    dp.register_message_handler(select_expense_category, Text(equals=['Продукты', 'Рестораны', 'Другой тип расхода', 'Назад']))
     dp.register_message_handler(request_statement, Text(equals="Получить выписку из банка"))
     dp.register_message_handler(custom_income_category, state=Form.add_custom_income_category)
     dp.register_message_handler(save_income, state=Form.add_income_amount)
